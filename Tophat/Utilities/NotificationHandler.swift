@@ -9,7 +9,7 @@
 import Foundation
 import Combine
 import TophatFoundation
-import TophatKit
+import TophatUtilities
 
 protocol NotificationHandlerDelegate: AnyObject {
 	func notificationHandler(didReceiveRequestToAddPinnedApplication pinnedApplication: PinnedApplication)
@@ -19,7 +19,6 @@ protocol NotificationHandlerDelegate: AnyObject {
 final class NotificationHandler {
 	weak var delegate: NotificationHandlerDelegate?
 
-	let onLaunchArtifactSet = PassthroughSubject<(ArtifactSet, Platform, [String]), Never>()
 	let onLaunchArtifactURL = PassthroughSubject<(URL, [String]), Never>()
 
 	private let notifier = TophatInterProcessNotifier()
@@ -29,10 +28,10 @@ final class NotificationHandler {
 		notifier
 			.publisher(for: TophatInstallHintedNotification.self)
 			.map { payload in
-				(ArtifactSet(artifacts: payload.artifacts), payload.platform, payload.launchArguments)
+//				(ArtifactSet(artifacts: payload.artifacts), payload.platform, payload.launchArguments)
 			}
 			.sink { [weak self] result in
-				self?.onLaunchArtifactSet.send(result)
+//				self?.onLaunchArtifactSet.send(result)
 			}
 			.store(in: &cancellables)
 
@@ -50,7 +49,7 @@ final class NotificationHandler {
 					id: payload.id,
 					name: payload.name,
 					platform: payload.platform,
-					artifacts: payload.artifacts
+					recipes: []
 				)
 
 				self?.delegate?.notificationHandler(didReceiveRequestToAddPinnedApplication: pinnedApplication)

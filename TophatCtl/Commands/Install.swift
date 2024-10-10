@@ -9,7 +9,7 @@
 import Foundation
 import ArgumentParser
 import TophatFoundation
-import TophatKit
+import TophatUtilities
 
 struct Install: ParsableCommand {
 	static var configuration = CommandConfiguration(

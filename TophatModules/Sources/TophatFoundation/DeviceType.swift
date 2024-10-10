@@ -18,9 +18,9 @@ extension DeviceType: CustomStringConvertible {
 	public var description: String {
 		switch self {
 			case .virtual:
-				return "virtual"
+				return "Simulator"
 			case .physical:
-				return "physical"
+				return "Device"
 		}
 	}
 }

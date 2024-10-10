@@ -16,7 +16,6 @@ import Sparkle
 import TophatServer
 import AndroidDeviceKit
 import AppleDeviceKit
-import GoogleStorageKit
 import FluidMenuBarExtra
 import TophatFoundation
 
@@ -35,7 +34,6 @@ struct TophatApp: App {
 
 		AndroidDeviceKit.log = log
 		AppleDeviceKit.log = log
-		GoogleStorageKit.log = log
 	}
 
 	var body: some Scene {
@@ -43,17 +41,17 @@ struct TophatApp: App {
 			SettingsView()
 				.showDockIconWhenOpen()
 				.environment(appDelegate.updateController)
+				.environment(appDelegate.extensionHost)
 				.environmentObject(appDelegate.deviceManager)
 				.environmentObject(appDelegate.pinnedApplicationState)
 				.environmentObject(appDelegate.utilityPathPreferences)
 				.environmentObject(appDelegate.launchAtLoginController)
 				.environmentObject(appDelegate.symbolicLinkManager)
 		}
-		.commandsRemoved()
 	}
 }
 
-private final class AppDelegate: NSObject, NSApplicationDelegate {
+@MainActor private final class AppDelegate: NSObject, NSApplicationDelegate {
 	// Hope nobody is running a Jedi Academy server...
 	@AppStorage("ListenPort") private var listenPort: Int = 29070
 	@AppStorage("HasCompletedFirstLaunch") private var hasCompletedFirstLaunch = false
@@ -67,7 +65,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 	)
 
 	private let server = TophatServer()
-	private let urlHandler = URLHandler()
+	private let urlHandler = URLReader()
 	private let notificationHandler = NotificationHandler()
 
 	let deviceManager: DeviceManager
@@ -77,6 +75,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 	let launchAtLoginController = LaunchAtLoginController()
 
 	let updateController: UpdateController
+
+	let extensionHost = ExtensionHost()
 
 	private let deviceSelectionManager: DeviceSelectionManager
 	private let taskStatusReporter: TaskStatusReporter
@@ -105,7 +105,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 			deviceManager: deviceManager,
 			deviceSelectionManager: deviceSelectionManager,
 			pinnedApplicationState: pinnedApplicationState,
-			taskStatusReporter: taskStatusReporter
+			taskStatusReporter: taskStatusReporter,
+			extensionHost: extensionHost
 		)
 
 		self.utilityPathPreferences = UtilityPathPreferences()
@@ -121,7 +122,6 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 		)
 
 		AndroidPathResolver.delegate = self.utilityPathPreferences
-		GoogleStoragePathResolver.delegate = self.utilityPathPreferences
 
 		super.init()
 
@@ -176,6 +176,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 		performFirstLaunchTasks()
 
 		Notifications.requestPermissions()
+		extensionHost.discover()
 	}
 
 	func application(_ application: NSApplication, open urls: [URL]) {
@@ -220,35 +221,24 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 				}
 			}
 		}
-
-		Publishers.MergeMany(
-			self.urlHandler.onLaunchArtifactURL,
-			self.notificationHandler.onLaunchArtifactURL
-		)
-		.sink { [weak self] (url, launchArguments) in
-			Task.detached(priority: .userInitiated) { [weak self] in
-				await self?.launchApp(artifactURL: url, context: LaunchContext(arguments: launchArguments))
-			}
-		}
-		.store(in: &cancellables)
-
-		Publishers.MergeMany(
-			self.urlHandler.onLaunchArtifactSet,
-			self.notificationHandler.onLaunchArtifactSet
-		)
-		.sink { [weak self] (artifactSet, platform, launchArguments) in
-			Task.detached(priority: .userInitiated) { [weak self] in
-				await self?.launchApp(artifactSet: artifactSet, on: platform, context: LaunchContext(arguments: launchArguments))
-			}
-		}
-		.store(in: &cancellables)
 	}
 
 	private func handle(urls: [URL]) {
 		do {
-			try urlHandler.handle(urls: urls)
+			for url in urls {
+				let urlReaderResult = try urlHandler.read(url: url)
+
+				Task {
+					switch urlReaderResult {
+						case .localFile(let url):
+							await launchApp(artifactURL: url)
+						case .install(let recipes):
+							await launchApp(recipes: recipes)
+					}
+				}
+			}
 		} catch let error {
-			if let error = error as? URLHandlerError {
+			if let error = error as? URLReaderError {
 				switch error {
 					case .malformedURL(let url):
 						log.error("Attempting to handle URL but it was malformed: \(url.absoluteString)")
@@ -273,24 +263,6 @@ extension AppDelegate: TophatServerDelegate {
 // MARK: - InstallCoordinatorDelegate
 
 extension AppDelegate: InstallCoordinatorDelegate {
-	func installCoordinator(didSuccessfullyInstallAppForPlatform platform: Platform) {
-		DistributedNotificationCenter.default().postNotificationName(
-			.init("TophatInstallSucceeded"),
-			object: nil,
-			userInfo: ["platform": String(describing: platform).lowercased()],
-			deliverImmediately: true
-		)
-	}
-
-	func installCoordinator(didFailToInstallAppForPlatform platform: Platform?) {
-		DistributedNotificationCenter.default().postNotificationName(
-			.init("TophatInstallFailed"),
-			object: nil,
-			userInfo: ["platform": String(describing: platform).lowercased()],
-			deliverImmediately: true
-		)
-	}
-
 	func installCoordinator(didPromptToAllowUntrustedHost host: String) async -> HostTrustResult {
 		await TrustedHostAlert().requestTrust(for: host)
 	}

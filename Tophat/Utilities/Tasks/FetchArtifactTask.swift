@@ -9,6 +9,14 @@
 import Foundation
 import TophatFoundation
 
+import TophatFoundation
+
+extension FetchArtifactTask: BuildDownloading {
+	func download(metadata: some BuildProviderMetadata) async throws -> any Application {
+		try await callAsFunction(from: .buildProvider(metadata: metadata)).application
+	}
+}
+
 struct FetchArtifactTask {
 	struct Result {
 		let application: Application
@@ -16,19 +24,22 @@ struct FetchArtifactTask {
 
 	let taskStatusReporter: TaskStatusReporter
 	let pinnedApplicationState: PinnedApplicationState
+	let buildProviderCoordinator: BuildProviderCoordinator
 	let context: LaunchContext?
 
-	private let status: TaskStatus
+//	private let status: TaskStatus
 
-	init(taskStatusReporter: TaskStatusReporter, pinnedApplicationState: PinnedApplicationState, context: LaunchContext?) {
+	init(taskStatusReporter: TaskStatusReporter, pinnedApplicationState: PinnedApplicationState, buildProviderCoordinator: BuildProviderCoordinator, context: LaunchContext?) {
 		self.taskStatusReporter = taskStatusReporter
 		self.pinnedApplicationState = pinnedApplicationState
+		self.buildProviderCoordinator = buildProviderCoordinator
 		self.context = context
 
-		self.status = TaskStatus(displayName: "Downloading \(context?.appName ?? "App")", initialState: .preparing)
+//		self.status = TaskStatus(displayName: "Downloading \(context?.appName ?? "App")", initialState: .preparing)
 	}
 
-	func callAsFunction(at url: URL) async throws -> Result {
+	func callAsFunction(from source: InstallationTicket.Source) async throws -> Result {
+		let status = TaskStatus(displayName: "Downloading \(context?.appName ?? "App")", initialState: .preparing)
 		await taskStatusReporter.add(status: status)
 
 		defer {
@@ -37,18 +48,30 @@ struct FetchArtifactTask {
 			}
 		}
 
-		log.info("Downloading artifact from \(url.absoluteString)")
 		await status.update(state: .running(message: "Downloading"))
 		taskStatusReporter.notify(message: "Downloading \(context?.appName ?? "application")…")
-		let downloadedArtifactUrl = try await downloadArtifact(at: url)
+		let downloadedArtifactUrl = switch source {
+			case .buildProvider(let metadata):
+				try await buildProviderCoordinator.retrieve(metadata: metadata)
+			case .local(let fileURL):
+				try await downloadArtifact(at: fileURL, status: status)
+			case .application(let application):
+				application.url
+		}
 		log.info("Artifact downloaded to \(downloadedArtifactUrl.path(percentEncoded: false))")
+
+		let copiedURL = try await ArtifactDownloader().download(artifactUrl: downloadedArtifactUrl)
 
 		log.info("Unpacking artifact at \(downloadedArtifactUrl.path(percentEncoded: false))")
 		await status.update(state: .running(message: "Unpacking"))
-		let application = try ArtifactUnpacker().unpack(artifactURL: downloadedArtifactUrl)
+		let application = try ArtifactUnpacker().unpack(artifactURL: copiedURL)
 		log.info("Artifact unpacked to \(application.url.path(percentEncoded: false))")
 
-		Task.detached {
+		if case .buildProvider(let metadata) = source {
+			try await buildProviderCoordinator.cleanUp(buildProviderIdentifier: metadata.id, localURL: downloadedArtifactUrl)
+		}
+
+		Task {
 			let updateIcon = UpdateIconTask(
 				taskStatusReporter: taskStatusReporter,
 				pinnedApplicationState: pinnedApplicationState,
@@ -61,7 +84,8 @@ struct FetchArtifactTask {
 		return Result(application: application)
 	}
 
-	private func downloadArtifact(at url: URL) async throws -> URL {
+	private func downloadArtifact(at url: URL, status: TaskStatus) async throws -> URL {
+		log.info("Downloading artifact from \(url.absoluteString)")
 		let artifactDownloader = ArtifactDownloader()
 
 		let task = Task {

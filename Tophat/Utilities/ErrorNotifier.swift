@@ -14,6 +14,9 @@ final class ErrorNotifier {
 	func notify(error: Error) {
 		let localizedError = error as? LocalizedError
 		let styledError = error as? StyledAlertError
+		print(error)
+		print(error.localizedDescription)
+		print(localizedError.debugDescription)
 
 		alertInBackground(
 			title: localizedError?.errorDescription,

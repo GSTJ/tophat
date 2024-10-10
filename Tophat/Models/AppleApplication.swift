@@ -83,6 +83,10 @@ struct AppleApplication: Application {
 	}
 
 	func validateEligibility(for device: Device) throws {
+		guard platform == device.runtime.platform else {
+			throw ApplicationError.incompatibleDeviceType
+		}
+
 		if !targets.contains(device.type) {
 			throw ApplicationError.incompatibleDeviceType
 		}

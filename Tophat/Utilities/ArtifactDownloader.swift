@@ -7,7 +7,6 @@
 //
 
 import Foundation
-import GoogleStorageKit
 import AsyncAlgorithms
 
 final class ArtifactDownloader: NSObject {
@@ -26,17 +25,6 @@ final class ArtifactDownloader: NSObject {
 
 		if artifactUrl.isFileURL {
 			try FileManager.default.copyItem(at: artifactUrl, to: destinationURL)
-		} else if artifactUrl.isGoogleStorageURL {
-			for try await progress in try GoogleStorage.download(artifactURL: artifactUrl, to: destinationURL) {
-				let progress: TaskProgress = .determinate(
-					totalUnitCount: progress.totalUnitCount,
-					pendingUnitCount: progress.pendingUnitCount
-				)
-
-				await progressUpdates.send(progress)
-			}
-		} else {
-			try await downloadFile(url: artifactUrl, to: destinationURL)
 		}
 
 		return destinationURL
@@ -46,7 +34,7 @@ final class ArtifactDownloader: NSObject {
 		do {
 			defer { progressObservation = nil }
 
-			let (localURL, _) = try await URLSession.shared.download(from: url, delegate: self)
+			let (localURL, response) = try await URLSession.shared.download(from: url, delegate: self)
 			try FileManager.default.moveItem(at: localURL, to: destinationURL)
 
 		} catch {

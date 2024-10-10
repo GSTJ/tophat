@@ -24,9 +24,9 @@ struct LaunchAppAction {
 		}
 	}
 
-	func callAsFunction(artifactSet: ArtifactSet, on platform: Platform, context: LaunchContext? = nil) async {
+	func callAsFunction(recipes: [InstallRecipe], context: LaunchContext? = nil) async {
 		do {
-			try await installCoordinator.launch(artifactSet: artifactSet, on: platform, context: context)
+			try await installCoordinator.install(recipes: recipes, context: context)
 		} catch {
 			ErrorNotifier().notify(error: error)
 		}

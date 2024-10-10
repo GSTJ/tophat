@@ -1,0 +1,27 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Basic HTTP" : {
+
+    },
+    "Core" : {
+
+    },
+    "File Name" : {
+
+    },
+    "Script" : {
+
+    },
+    "Shell Script" : {
+
+    },
+    "The name of the script to run." : {
+
+    },
+    "URL" : {
+
+    }
+  },
+  "version" : "1.0"
+}

@@ -8,8 +8,10 @@
 
 import SwiftUI
 import TophatFoundation
+@_spi(TophatKitInternal) import TophatKit
 
 struct PinnedApplicationRow: View {
+	@Environment(ExtensionHost.self) private var extensionHost
 	@Environment(\.isEnabled) private var isEnabled
 
 	let application: PinnedApplication
@@ -24,21 +26,37 @@ struct PinnedApplicationRow: View {
 					.pinnedApplicationImageStyle()
 			}
 			VStack(alignment: .leading, spacing: 3) {
-				Text("\(application.name) (\(application.platform.description))")
+				Text(application.name)
 					.fontWeight(.medium)
 
-				ForEach(application.artifacts, id: \.url) { artifact in
-					BadgedURL(badges: formatted(targets: artifact.targets), url: artifact.url)
+				HStack {
+					BadgedText(text: "\(application.platform.description)")
+
+					if let buildProviderID = application.recipes.first?.buildProviderID, let buildProvider = buildProviders.first(where: { $0.id == buildProviderID }) {
+						BadgedText(text: buildProvider.title)
+					}
 				}
 			}
 		}
 		.opacity(isEnabled ? 1 : 0.5)
 	}
 
-	private func formatted(targets: Set<DeviceType>) -> [String] {
-		Array(targets)
-			.map { String(describing: $0).capitalized }
-			.sorted()
+	private var buildProviders: [BuildProviderSpecification] {
+		extensionHost.specifications.flatMap(\.buildProviders)
+	}
+}
+
+private struct BadgedText: View {
+	var text: LocalizedStringResource
+
+	var body: some View {
+		Text(text)
+			.font(.caption)
+			.foregroundColor(.secondary)
+			.padding(.vertical, 1)
+			.padding(.horizontal, 4)
+			.background(.quaternary)
+			.cornerRadius(3)
 	}
 }
 

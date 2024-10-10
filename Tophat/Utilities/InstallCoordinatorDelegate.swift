@@ -9,7 +9,5 @@
 import TophatFoundation
 
 protocol InstallCoordinatorDelegate: AnyObject {
-	func installCoordinator(didSuccessfullyInstallAppForPlatform platform: Platform)
-	func installCoordinator(didFailToInstallAppForPlatform platform: Platform?)
 	func installCoordinator(didPromptToAllowUntrustedHost host: String) async -> HostTrustResult
 }

@@ -13,7 +13,7 @@ struct InstallApplicationTask {
 	let taskStatusReporter: TaskStatusReporter
 	let context: LaunchContext?
 
-	func callAsFunction(application: Application, device: Device) async throws {
+	func callAsFunction(application: Application, device: Device, launchArguments: [String]) async throws {
 		let metadata = InstallStatusMetadata(deviceId: device.id)
 		let appName = application.name ?? context?.appName
 		let status = TaskStatus(
@@ -55,6 +55,6 @@ struct InstallApplicationTask {
 		taskStatusReporter.notify(message: "Launching \(notificationAppName) on \(device.name)…")
 		await status.update(state: .running(message: "Launching"))
 
-		try device.launch(application: application, arguments: context?.arguments)
+		try device.launch(application: application, arguments: launchArguments)
 	}
 }
